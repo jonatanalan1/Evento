@@ -46,6 +46,13 @@ img{max-width:100%;}
   --pal-laranja:#EC6F32;
   --pal-amarelo:#D9A400;
   --pal-roxo:#7C5CBF;
+  --pal-azul-tint:#CDDDF3;
+  --pal-azul-claro-tint:#D1EAFA;
+  --pal-vermelho-tint:#F8D4D1;
+  --pal-verde-tint:#CCE9D8;
+  --pal-laranja-tint:#FBDFD2;
+  --pal-amarelo-tint:#F7EBC7;
+  --pal-roxo-tint:#E2DBF1;
 }
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
@@ -64,6 +71,13 @@ img{max-width:100%;}
     --pal-laranja:#FF9A5C;
     --pal-amarelo:#F0CB5C;
     --pal-roxo:#B39CEE;
+    --pal-azul-tint:#304666;
+    --pal-azul-claro-tint:#355168;
+    --pal-vermelho-tint:#5A3C42;
+    --pal-verde-tint:#285348;
+    --pal-laranja-tint:#5E453C;
+    --pal-amarelo-tint:#5A533C;
+    --pal-roxo-tint:#484665;
   }
 }
 :root[data-theme="dark"]{
@@ -82,6 +96,13 @@ img{max-width:100%;}
   --pal-laranja:#FF9A5C;
   --pal-amarelo:#F0CB5C;
   --pal-roxo:#B39CEE;
+  --pal-azul-tint:#304666;
+  --pal-azul-claro-tint:#355168;
+  --pal-vermelho-tint:#5A3C42;
+  --pal-verde-tint:#285348;
+  --pal-laranja-tint:#5E453C;
+  --pal-amarelo-tint:#5A533C;
+  --pal-roxo-tint:#484665;
 }
 *{box-sizing:border-box;}
 html,body{height:100%;}
@@ -264,6 +285,7 @@ section.active{display:block;}
 .section-note{font-size:12px;color:var(--ink-dim);line-height:1.5;margin:16px 2px 4px;}
 footer{text-align:center;color:var(--ink-dim);font-size:11px;padding:22px 0 6px;}
 
+/* ---- tela de acesso (embed) ---- */
 @media (max-width:380px){
   body{padding-inline:11px;}
   .logo-img{height:28px;max-width:26%;}
@@ -334,9 +356,9 @@ const PALETTE = [
 ];
 function paletteVar(key){ return PALETTE.some(p=>p.key===key) ? `var(--pal-${key.replace('_','-')})` : null; }
 function colorStyle(key){
-  const v = paletteVar(key);
-  if(!v) return '';
-  return ` style="border-left-color:${v};background:color-mix(in srgb, ${v} 16%, var(--surface));"`;
+  if(!key || !PALETTE.some(p=>p.key===key)) return '';
+  const slug = key.replace('_','-');
+  return ` style="border-left-color:var(--pal-${slug});background:var(--pal-${slug}-tint);"`;
 }
 
 let teamColors = loadJSON('unearthed_colors_v2', {future:{}, explore:{}});
