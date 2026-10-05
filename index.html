@@ -163,12 +163,15 @@ section.active{display:block;}
 .empty-hint{color:var(--ink-dim);font-size:13px;padding:20px 6px;text-align:center;line-height:1.5;}
 
 .station-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(76px,1fr));gap:8px;margin-bottom:18px;}
-.station-btn{border:1px solid var(--line);background:var(--surface);border-radius:11px;padding:10px 4px;text-align:center;cursor:pointer;color:var(--ink);box-shadow:var(--shadow);}
+.station-btn{position:relative;border:1px solid var(--line);background:var(--surface);border-radius:11px;text-align:center;color:var(--ink);box-shadow:var(--shadow);}
+.station-btn .st-body{padding:10px 4px;cursor:pointer;}
 .station-btn .k{display:block;font-family:var(--font-mono);font-size:14px;font-weight:600;font-variant-numeric:tabular-nums;}
 .station-btn .t{display:block;font-size:9px;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-dim);margin-top:2px;}
 .station-btn.kind-mesa{border-top:3px solid var(--accent);}
 .station-btn.kind-sala{border-top:3px solid var(--accent-2);}
 .station-btn.kind-pit{border-top:3px solid var(--pit);}
+.st-star{position:absolute;top:2px;right:2px;border:0;background:transparent;font-size:13px;line-height:1;cursor:pointer;padding:3px;color:var(--line);}
+.st-star.on{color:var(--accent-2);}
 
 .detail-head{display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap;}
 .back-btn{border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:10px;padding:8px 11px;font-size:13px;font-weight:700;cursor:pointer;flex:none;}
@@ -344,6 +347,15 @@ function toggleFav(evt,id){
   saveFavs(); render();
 }
 function favTotal(){ return favs.future.length + favs.explore.length; }
+
+let stationFavs = loadJSON('unearthed_station_favs_v1', {future:[], explore:[]});
+function saveStationFavs(){ saveJSON('unearthed_station_favs_v1', stationFavs); }
+function toggleStationFav(evt,key){
+  const list = stationFavs[evt];
+  const i = list.indexOf(key);
+  if(i>=0) list.splice(i,1); else list.push(key);
+  saveStationFavs(); render();
+}
 
 const PALETTE = [
   {key:'azul', label:'Azul'},
@@ -695,23 +707,39 @@ function renderStationGroups(body){
     const ka=stationSortKey(a), kb=stationSortKey(b);
     return ka[0]-kb[0] || ka[1]-kb[1] || (ka[2]>kb[2]?1:ka[2]<kb[2]?-1:0);
   });
+  const favList = stationFavs[state.event] || [];
+  const favStations = stations.filter(s=>favList.includes(s));
+  const restStations = stations.filter(s=>!favList.includes(s));
   const groups = {mesa:[],sala:[],pit:[]};
-  stations.forEach(s=>groups[stationKind(s)].push(s));
-  const titles = {mesa:'Mesas de experimentação/disputa', sala:'Salas de avaliação', pit:'Pits de avaliação'};
+  restStations.forEach(s=>groups[stationKind(s)].push(s));
+  const titles = {mesa:'Mesas de experimentação', sala:'Salas de avaliação', pit:'Pits de avaliação'};
+  function btnHtml(s,k){
+    const parts = s.split(' ');
+    const num = parts[1] + (parts[2]?(' '+parts[2]):'');
+    const on = favList.includes(s);
+    return `<div class="station-btn kind-${k}" data-st="${s}">
+      <button class="st-star ${on?'on':''}" data-st="${s}" aria-label="Favoritar posto">${on?'★':'☆'}</button>
+      <div class="st-body" data-st="${s}"><span class="k">${num}</span><span class="t">${k}</span></div>
+    </div>`;
+  }
   let html = '';
+  if(favStations.length){
+    html += `<div class="list-label">Favoritos</div><div class="station-grid">`;
+    html += favStations.map(s=>btnHtml(s, stationKind(s))).join('');
+    html += `</div>`;
+  }
   ['mesa','sala','pit'].forEach(k=>{
     if(!groups[k].length) return;
     html += `<div class="list-label">${titles[k]}</div><div class="station-grid">`;
-    html += groups[k].map(s=>{
-      const parts = s.split(' ');
-      const num = parts[1] + (parts[2]?(' '+parts[2]):'');
-      return `<button class="station-btn kind-${k}" data-st="${s}"><span class="k">${num}</span><span class="t">${k}</span></button>`;
-    }).join('');
+    html += groups[k].map(s=>btnHtml(s,k)).join('');
     html += `</div>`;
   });
   body.innerHTML = html;
-  body.querySelectorAll('.station-btn').forEach(el=>{
+  body.querySelectorAll('.st-body').forEach(el=>{
     el.onclick=()=>{ state.mode='station-detail'; state.station=el.dataset.st; render(); };
+  });
+  body.querySelectorAll('.st-star').forEach(el=>{
+    el.onclick=()=>{ toggleStationFav(state.event, el.dataset.st); };
   });
 }
 function renderStationDetail(){
