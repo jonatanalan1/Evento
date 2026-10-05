@@ -350,12 +350,14 @@ function favTotal(){ return favs.future.length + favs.explore.length; }
 
 let stationFavs = loadJSON('unearthed_station_favs_v1', {future:[], explore:[]});
 function saveStationFavs(){ saveJSON('unearthed_station_favs_v1', stationFavs); }
+function isStationFav(evt,key){ return stationFavs[evt].includes(key); }
 function toggleStationFav(evt,key){
   const list = stationFavs[evt];
   const i = list.indexOf(key);
   if(i>=0) list.splice(i,1); else list.push(key);
   saveStationFavs(); render();
 }
+function stationFavTotal(){ return stationFavs.future.length + stationFavs.explore.length; }
 
 const PALETTE = [
   {key:'azul', label:'Azul'},
@@ -418,7 +420,7 @@ function renderTopbar(){
   nav.innerHTML = `
     <div class="nav-group">
       ${modes.map(([k,label])=>{
-        const badge = k==='favorites' && favTotal()>0 ? `<span class="fav-count">${favTotal()}</span>` : '';
+        const badge = k==='favorites' && (favTotal()+stationFavTotal())>0 ? `<span class="fav-count">${favTotal()+stationFavTotal()}</span>` : '';
         const active = state.mode===k || (state.mode==='team-detail'&&k==='team');
         return `<button data-mode="${k}" class="${active?'active':''}">${label}${badge}</button>`;
       }).join('')}
@@ -533,7 +535,7 @@ function renderTeamDetail(){
 /* ---------- favorites ---------- */
 function renderFavorites(){
   const view = document.getElementById('favList');
-  let cards = [];
+  let teamCards = [];
   EVENTS.forEach(evt=>{
     favs[evt].forEach(id=>{
       const t = DATA[evt].teams.find(x=>x.id===id);
@@ -544,19 +546,40 @@ function renderFavorites(){
         : (nxt ? `Próximo: <b>${nxt.loc||nxt.title}</b> às ${nxt.start}` : 'Sem mais compromissos hoje');
       const col = getColor(evt, id);
       const style = colorStyle(col);
-      cards.push(`<div class="fav-card" data-evt="${evt}" data-id="${id}"${style}>
+      teamCards.push(`<div class="fav-card" data-kind="team" data-evt="${evt}" data-id="${id}"${style}>
         <div class="top"><span class="evt ${EVT_LABEL_CLASS[evt]}">${DATA[evt].label}</span><span class="name">${t.id} &middot; ${t.name}</span></div>
         <div class="now-line">${line}</div>
       </div>`);
     });
   });
-  if(!cards.length){
-    view.innerHTML = `<div class="empty-hint">Você ainda não favoritou nenhuma equipe.<br>Toque na estrela ☆ ao lado de uma equipe para acompanhar aqui.</div>`;
+  let stationCards = [];
+  EVENTS.forEach(evt=>{
+    (stationFavs[evt]||[]).forEach(key=>{
+      if(!DATA[evt].stations[key]) return;
+      const {cur,nxt} = stationQueueNowNext(evt, key);
+      const line = cur
+        ? `Agora: <b>Equipe ${cur.team_id} &mdash; ${cur.team_name}</b> (${cur.start}&ndash;${cur.end})`
+        : (nxt ? `Próximo: <b>Equipe ${nxt.team_id} &mdash; ${nxt.team_name}</b> às ${nxt.start}` : 'Sem mais compromissos hoje');
+      stationCards.push(`<div class="fav-card" data-kind="station" data-evt="${evt}" data-station="${key}">
+        <div class="top"><span class="evt ${EVT_LABEL_CLASS[evt]}">${DATA[evt].label}</span><span class="name">${key}</span></div>
+        <div class="now-line">${line}</div>
+      </div>`);
+    });
+  });
+  if(!teamCards.length && !stationCards.length){
+    view.innerHTML = `<div class="empty-hint">Você ainda não favoritou nenhuma equipe ou posto.<br>Toque na estrela ☆ ao lado de uma equipe ou posto para acompanhar aqui.</div>`;
     return;
   }
-  view.innerHTML = cards.join('');
-  view.querySelectorAll('.fav-card').forEach(el=>{
+  let html = teamCards.join('');
+  if(stationCards.length){
+    html += `<div class="list-label">Postos de voluntário</div>` + stationCards.join('');
+  }
+  view.innerHTML = html;
+  view.querySelectorAll('.fav-card[data-kind="team"]').forEach(el=>{
     el.onclick=()=>{ state.event=el.dataset.evt; state.mode='team-detail'; state.teamId=el.dataset.id; render(); };
+  });
+  view.querySelectorAll('.fav-card[data-kind="station"]').forEach(el=>{
+    el.onclick=()=>{ state.event=el.dataset.evt; state.mode='station-detail'; state.station=el.dataset.station; render(); };
   });
 }
 
@@ -742,21 +765,34 @@ function renderStationGroups(body){
     el.onclick=()=>{ toggleStationFav(state.event, el.dataset.st); };
   });
 }
-function renderStationDetail(){
-  const queue = DATA[state.event].stations[state.station] || [];
-  const view = document.getElementById('view-station-detail');
-  const n = nowStr();
+function stationQueueRows(evt, key){
+  const queue = DATA[evt].stations[key] || [];
   const rows = [];
   queue.forEach(q=>{
     rows.push({start:q.start,end:q.end,team_id:q.team_id,team_name:q.team_name,notas:false});
     if(q.notes_end){ rows.push({start:q.end,end:q.notes_end,team_id:q.team_id,team_name:q.team_name,notas:true}); }
   });
+  return rows;
+}
+function stationQueueNowNext(evt, key){
+  const rows = stationQueueRows(evt, key);
+  const n = nowStr();
   let cur=null,nxt=null;
   for(let i=0;i<rows.length;i++){
     const r = rows[i];
-    if(r.start<=n && n<r.end && !r.notas){ cur={start:r.start,end:r.end,title:'Equipe '+r.team_id,loc:r.team_name}; break; }
-    if(n<r.start){ nxt={start:r.start,end:r.end,title:'Equipe '+r.team_id,loc:r.team_name}; break; }
+    if(r.start<=n && n<r.end && !r.notas){ cur={start:r.start,end:r.end,team_id:r.team_id,team_name:r.team_name}; break; }
+    if(n<r.start){ nxt={start:r.start,end:r.end,team_id:r.team_id,team_name:r.team_name}; break; }
   }
+  return {cur,nxt};
+}
+function renderStationDetail(){
+  const view = document.getElementById('view-station-detail');
+  const n = nowStr();
+  const rows = stationQueueRows(state.event, state.station);
+  const {cur:curRaw,nxt:nxtRaw} = stationQueueNowNext(state.event, state.station);
+  const cur = curRaw ? {start:curRaw.start,end:curRaw.end,title:'Equipe '+curRaw.team_id,loc:curRaw.team_name} : null;
+  const nxt = nxtRaw ? {start:nxtRaw.start,end:nxtRaw.end,title:'Equipe '+nxtRaw.team_id,loc:nxtRaw.team_name} : null;
+  const on = isStationFav(state.event, state.station);
   const items = rows.map(r=>{
     const isNow = r.start<=n && n<r.end;
     const isPast = r.end<=n;
@@ -769,12 +805,16 @@ function renderStationDetail(){
     <div class="detail-head">
       <button class="back-btn" id="backStation">&larr; voluntários</button>
       <div class="detail-title"><div class="name">${state.station}</div><div class="id">${DATA[state.event].label} &middot; fila do dia</div></div>
+      <div class="detail-actions">
+        <button class="star-btn ${on?'on':''}" id="starStationDetail">${on?'★':'☆'}</button>
+      </div>
     </div>
     ${boardHtml(cur,nxt)}
     <div class="list-label">Fila completa</div>
     ${items || '<div class="empty-hint">Sem equipes previstas neste posto.</div>'}
   `;
   document.getElementById('backStation').onclick=()=>{state.mode='volunteers';state.station=null;render();};
+  document.getElementById('starStationDetail').onclick=()=>toggleStationFav(state.event, state.station);
 }
 
 /* ---------- master render ---------- */
